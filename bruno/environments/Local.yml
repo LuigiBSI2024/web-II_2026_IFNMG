@@ -1,0 +1,10 @@
+name: Local
+variables:
+  - name: baseUrl
+    value: http://localhost:3000
+    description: ""
+  - name: subjectId
+    value:
+      type: number
+      data: "3"
+    description: ""

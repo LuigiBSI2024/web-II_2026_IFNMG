@@ -1,0 +1,35 @@
+info:
+  name: Criar questão com dificuldade inválida
+  type: http
+  seq: 14
+  tags:
+    - atividade-04
+
+http:
+  method: POST
+  url: "{{baseUrl}}/questions"
+  body:
+    type: json
+    data: |-
+      {
+        "enunciado": "Questão inválida",
+        "dificuldade": 4,
+        "subjectId": 3,
+        "authorId": 1
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Rejeita dificuldade fora do intervalo permitido", function() {
+          expect(res.status).to.equal(400);
+          expect(res.body.success).to.equal(false);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
