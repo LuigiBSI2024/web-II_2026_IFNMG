@@ -153,3 +153,6 @@ skills-lock.json
 .windsurf/
 /src/generated/prisma
 tests/fixtures/upload/
+
+secrets.env
+tests.env
