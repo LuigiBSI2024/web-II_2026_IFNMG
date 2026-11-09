@@ -1,0 +1,65 @@
+info:
+  name: "PATCH V2 documentado"
+  type: http
+  seq: 7
+  tags: [aula-10-pratica]
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api-docs.json"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const spec = res.body;
+        /** Segue referências internas ("#/components/...") até o objeto documentado. */
+        function resolve(node) {
+          let current = node;
+          while (current?.$ref) current = current.$ref.slice(2).split("/").reduce((value, key) => value?.[key], spec);
+          return current;
+        }
+        const item = {"path": "/v2/users/{id}", "method": "patch", "tag": "Usuários V2", "statuses": [200, 400, 404, 409, 413, 502], "idParam": true, "json": [], "multipart": true};
+        const operation = spec.paths?.[item.path]?.[item.method];
+        test("Operação documentada com resumo e tag", function () {
+          expect(res.status).to.equal(200);
+          expect(operation, `${item.method.toUpperCase()} ${item.path} documentado`).to.be.an("object");
+          expect(operation.summary).to.be.a("string");
+          expect(operation.tags).to.include(item.tag);
+        });
+        test("Status documentados; erros usam ErrorResponse", function () {
+          expect(operation, "operação documentada").to.be.an("object");
+          for (const status of item.statuses) {
+            const response = resolve(operation.responses?.[status]);
+            expect(response, `resposta ${status}`).to.be.an("object");
+            expect(response.description).to.be.a("string");
+            if (status >= 400 && item.path !== "/health") {
+              expect(resolve(response.content?.["application/json"]?.schema), `resposta ${status}`).to.deep.equal(spec.components.schemas.ErrorResponse);
+            }
+          }
+        });
+        test("Parâmetro de caminho id inteiro e positivo", function () {
+          expect(operation, "operação documentada").to.be.an("object");
+          const id = (operation.parameters || []).map(resolve).find((parameter) => parameter?.in === "path" && parameter.name === "id");
+          expect(id, "parâmetro id").to.be.an("object");
+          expect(id.required).to.equal(true);
+          expect(id.schema).to.include({ type: "integer", minimum: 1 });
+        });
+        test("Corpo JSON estrito com campos obrigatórios", function () {
+          expect(operation, "operação documentada").to.be.an("object");
+          expect(operation.requestBody?.required).to.equal(true);
+          const schema = resolve(operation.requestBody.content?.["application/json"]?.schema);
+          expect(schema, "corpo JSON").to.be.an("object");
+          expect(schema.additionalProperties).to.equal(false);
+          expect([...(schema.required || [])].sort()).to.deep.equal(item.json);
+          if (item.json.length === 0) expect(schema.minProperties).to.equal(1);
+        });
+        test("Corpo multipart com foto binária", function () {
+          expect(operation, "operação documentada").to.be.an("object");
+          const schema = resolve(operation.requestBody?.content?.["multipart/form-data"]?.schema);
+          expect(schema, "corpo multipart").to.be.an("object");
+          expect(resolve(schema.properties?.foto)?.format).to.equal("binary");
+        });
+
+settings:
+  encodeUrl: true

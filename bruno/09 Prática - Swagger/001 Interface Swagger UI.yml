@@ -1,0 +1,23 @@
+info:
+  name: "Interface Swagger UI"
+  type: http
+  seq: 1
+  tags: [aula-10-pratica]
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api-docs/"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("Interface Swagger UI servida como HTML", function () {
+          expect(res.status).to.equal(200);
+          expect(res.headers["content-type"]).to.include("text/html");
+          expect(res.body).to.include("swagger-ui");
+          expect(res.body).to.include("API Gerador de Provas - Documentação");
+        });
+
+settings:
+  encodeUrl: true

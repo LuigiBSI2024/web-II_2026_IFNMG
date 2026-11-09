@@ -1,0 +1,64 @@
+info:
+  name: "Resposta real V2 segue o schema"
+  type: http
+  seq: 9
+  tags: [aula-10-pratica]
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api-docs.json"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const baseUrl = bru.getEnvVar("baseUrl");
+        bru.setVar("a10Ids", []);
+        bru.setVar("a10Cleanup", ["Limpeza ainda não executada"]);
+        bru.setVar("a10Found", null);
+        const email = `aula10-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
+        /** Prepara um usuário real pela própria rota V2 e guarda a resposta do GET. */
+        const created = await bru.sendRequest({ method: "POST", url: `${baseUrl}/v2/users`, headers: { "Content-Type": "application/json" }, data: { ...{"primeiroNome": "Grace", "sobrenome": "Hopper"}, email } });
+        if (created.status !== 201) throw new Error(`Preparação: HTTP ${created.status}`);
+        bru.setVar("a10Ids", [created.data.data.id]);
+        const found = await bru.sendRequest({ method: "GET", url: `${baseUrl}/v2/users/${created.data.data.id}` });
+        bru.setVar("a10Found", found.data);
+    - type: after-response
+      code: |-
+        const errors = [];
+        for (const id of bru.getVar("a10Ids") || []) {
+          try {
+            const response = await bru.sendRequest({ method: "DELETE", url: `${bru.getEnvVar("baseUrl")}/v1/users/${id}` });
+            if (![200, 404].includes(response.status)) errors.push(`HTTP ${response.status}`);
+          } catch (error) {
+            if (error.response?.status !== 404) errors.push("Falha de limpeza da própria fixture");
+          }
+        }
+        bru.setVar("a10Cleanup", errors);
+    - type: tests
+      code: |-
+        const spec = res.body;
+        /** Segue referências internas ("#/components/...") até o objeto documentado. */
+        function resolve(node) {
+          let current = node;
+          while (current?.$ref) current = current.$ref.slice(2).split("/").reduce((value, key) => value?.[key], spec);
+          return current;
+        }
+        const found = bru.getVar("a10Found");
+        const operation = spec.paths?.["/v2/users/{id}"]?.get;
+        test("Limpa somente fixtures próprias", function () {
+          expect(bru.getVar("a10Cleanup")).to.deep.equal([]);
+        });
+        test("Schema documentado descreve exatamente a resposta real", function () {
+          expect(operation, "GET /v2/users/{id} documentado").to.be.an("object");
+          const envelope = resolve(resolve(operation.responses?.[200])?.content?.["application/json"]?.schema);
+          expect(envelope, "schema da resposta 200").to.be.an("object");
+          for (const key of Object.keys(found)) expect(envelope.properties).to.have.property(key);
+          const user = resolve(envelope.properties.data);
+          const actualKeys = Object.keys(found.data).sort();
+          expect(Object.keys(user.properties).sort()).to.deep.equal(actualKeys);
+          expect([...(user.required || [])].sort()).to.deep.equal(actualKeys);
+        });
+
+settings:
+  encodeUrl: true

@@ -1,0 +1,54 @@
+info:
+  name: "Especificação OpenAPI"
+  type: http
+  seq: 2
+  tags: [aula-10-pratica]
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api-docs.json"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const spec = res.body;
+        /** Segue referências internas ("#/components/...") até o objeto documentado. */
+        function resolve(node) {
+          let current = node;
+          while (current?.$ref) current = current.$ref.slice(2).split("/").reduce((value, key) => value?.[key], spec);
+          return current;
+        }
+        test("Especificação OpenAPI 3.0.3 publicada", function () {
+          expect(res.status).to.equal(200);
+          expect(res.headers["content-type"]).to.include("application/json");
+          expect(spec.openapi).to.equal("3.0.3");
+          expect(spec.info.title).to.equal("API do Gerador de Provas");
+          expect(spec.servers[0].url).to.equal("/");
+        });
+        test("Todas as referências internas existem", function () {
+          const refs = [];
+          (function collect(node) {
+            if (Array.isArray(node)) node.forEach(collect);
+            else if (node && typeof node === "object") {
+              if (typeof node.$ref === "string") refs.push(node.$ref);
+              Object.values(node).forEach(collect);
+            }
+          })(spec);
+          expect(refs.length).to.be.above(0);
+          for (const ref of refs) expect(resolve({ $ref: ref }), ref).to.be.an("object");
+        });
+        test("Toda operação usa tag declarada e documenta um sucesso", function () {
+          const declared = spec.tags.map((tag) => tag.name);
+          for (const [path, methods] of Object.entries(spec.paths)) {
+            for (const [method, operation] of Object.entries(methods)) {
+              const label = `${method.toUpperCase()} ${path}`;
+              expect(operation.tags, label).to.be.an("array").that.is.not.empty;
+              operation.tags.forEach((tag) => expect(declared, label).to.include(tag));
+              expect(Object.keys(operation.responses || {}).some((status) => status.startsWith("2")), label).to.equal(true);
+            }
+          }
+        });
+
+settings:
+  encodeUrl: true
